@@ -3,81 +3,55 @@ package edu.umkc.sce.csee.dbis.pararead.reader;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 public class ParallelFileReader {
 
   private final String filename;
   private final int numSplits;
+  private final long[] readOffset;
 
-  public ParallelFileReader(String filename, int numReadThreads) {
+  public ParallelFileReader(String filename, int numSplits) {
     this.filename = filename;
-    this.numSplits = numReadThreads;
+    this.numSplits = numSplits;
+
+    // Get the read offset for every thread
+    readOffset = getReadOffsets(filename, numSplits);
   }
 
-  public void readTheFile() {
-    // Get the read offset for every thread
-    long[] readOffset = getReadOffsets(filename, numSplits);
-
+  public void readTheFile(int[] lineCounters) {
     // Read the file via threads, each starting at a readOffset
-    readInputFile(filename, readOffset);
+    final int numOffsets = readOffset.length;
+    int offset = 0;
+    Thread [] threads = new Thread[numSplits];
+    while (offset < numOffsets - 1) {
+      Thread t = new ReadSplitThread(filename, readOffset[offset], readOffset[offset + 1],lineCounters);
+      t.start();
+      threads[offset] = t;
+      offset++;
+    }
+    
+    for (int t = 0; t < threads.length; t++){
+      try {
+        threads[t].join();
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
+    
   }
 
   private long[] getReadOffsets(String filename, int numSplits) {
     // Get split offsets
     final long[] rawReadOffset = getRawReadOffset(filename, numSplits);
     // System.out.println(Arrays.toString(rawReadOffset));
-    
+
     // Align split offsets to the beginning of the lines
     final long[] readOffsets = getFormattedReadOffset(filename, rawReadOffset);
     // System.out.println(Arrays.toString(readOffsets));
-    
+
     return readOffsets;
-  }
-
-  private void readInputFile(final String filename, long[] readOffsets) {
-    final int numOffsets = readOffsets.length;
-    int offset = 0;
-    while (offset < numOffsets - 1) {
-      Thread t = new ReadSplitThread(filename, readOffsets[offset], readOffsets[offset + 1]);
-      t.start();
-      offset++;
-    }
-  }
-
-  private class ReadSplitThread extends Thread {
-    private final String filename;
-    private final long start;
-    private final long end;
-
-    public ReadSplitThread(String filename, long start, long end) {
-      this.filename = filename;
-      this.start = start;
-      this.end = end;
-    }
-
-    @Override
-    public void run() {
-      readFileAtTo();
-    }
-
-    private void readFileAtTo() {
-      try {
-        RandomAccessFile raf = new RandomAccessFile(filename, "r");
-        raf.seek(start);
-        while (raf.getFilePointer() < end) {
-          String data = raf.readLine();
-          System.out.println(data);
-        }
-        raf.close();
-
-      } catch (FileNotFoundException e) {
-        e.printStackTrace();
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-
-    }
-
   }
 
   private long[] getFormattedReadOffset(String filename, long[] rawReadOffset) {
@@ -123,9 +97,7 @@ public class ParallelFileReader {
     if (splitLength < 1) {
       return new long[] {(long) 0};
     }
-
     long[] readOffsets = new long[numSplits];
-
     readOffsets[0] = (long) 0;
     for (int split = 1; split < numSplits; split++) {
       readOffsets[split] = splitLength * split;

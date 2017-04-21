@@ -2,6 +2,7 @@ package edu.umkc.sce.csee.dbis.pararead.reader;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Arrays;
 
 /**
  * Anas Katib
@@ -13,10 +14,18 @@ public class App {
     String filename = "input.txt";
     // 100 lines each with line_number + 10 chars
     createInputFile(100,10,filename);
-    
     int numReadThreads = 4;
+    int [] numLinesCounters = new int [numReadThreads];
+    
     ParallelFileReader pfr = new ParallelFileReader(filename, numReadThreads);
-    pfr.readTheFile();
+    System.out.println(Arrays.toString(numLinesCounters));
+    pfr.readTheFile(numLinesCounters);
+    System.out.println(Arrays.toString(numLinesCounters));
+    int sum = 0;
+    for (int c = 0; c < numLinesCounters.length; c++){
+      sum += numLinesCounters[c];
+    }
+    System.out.println("Read: "+sum+" lines.");
   }
 
   private static void createInputFile(int numLines, int lineWidth, String fileName) {
